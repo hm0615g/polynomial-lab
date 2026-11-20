@@ -267,24 +267,31 @@ def _q_roots(factors, scope, digits):
     for factor, outer_multiplicity in factors:
         if scope == "base" and factor.degree() != 1:
             continue
-        root_pairs = None
-        if factor.degree() <= 4:
-            # Keep useful quadratic/biquadratic radicals without huge cubic and
-            # quartic formulas.  CRootOf remains an exact general fallback.
-            simple = sp.roots(factor.as_expr(), X, cubics=False, quartics=False)
-            if sum(simple.values()) == factor.degree():
-                if scope != "real" or all(root.is_real is not None for root in simple):
-                    root_pairs = [(root, mult) for root, mult in simple.items()
-                                  if scope != "real" or root.is_real]
-        if root_pairs is None:
+        # Try the symbolic solver at every degree: besides general cubic and
+        # quartic formulas it handles supported quintics, binomials and cyclotomics.
+        # Use its output only when the complete factor is accounted for.
+        explicit = sp.roots(factor.as_expr(), X, cubics=True, quartics=True, quintics=True)
+        if sum(explicit.values()) == factor.degree():
+            root_pairs = list(explicit.items())
+        else:
             root_pairs = (factor.real_roots(multiple=False) if scope == "real"
                           else factor.all_roots(multiple=False))
         if scope == "all" and sum(int(mult) for _, mult in root_pairs) != factor.degree():
             raise ArithmeticError("Exact root coverage failed")
         for root, inner_multiplicity in root_pairs:
+            is_real = root.is_real
+            if is_real is None:
+                # Both values are roots of this rational-coefficient factor.
+                # same_root uses a root-separation bound and bounded-error
+                # evaluation, not an arbitrary numerical proximity threshold.
+                is_real = bool(factor.same_root(root, sp.conjugate(root)))
+            if scope == "real" and not is_real:
+                continue
             uses_rootof = uses_rootof or root.has(sp.CRootOf)
-            approximation = root.evalf(digits, maxn=1000, strict=True)
-            label = "Q" if root.is_Rational else ("Qbar ∩ R" if root.is_real else "Qbar")
+            # Once reality is certified, evaluate only the real part. Cardano
+            # expressions may have complex intermediates even for real roots.
+            approximation = (sp.re(root) if is_real else root).evalf(digits, maxn=1000, strict=True)
+            label = "Q" if root.is_Rational else ("Qbar ∩ R" if is_real else "Qbar")
             result.append({"text": _text(root), "latex": sp.latex(root),
                            "approx_text": _text(approximation), "approx_latex": sp.latex(approximation),
                            "multiplicity": int(outer_multiplicity * inner_multiplicity),
@@ -465,7 +472,7 @@ def _calculate(request):
     else:
         result["roots"], uses_rootof = _q_roots(factors, scope, digits)
         if uses_rootof:
-            warnings.append("CRootOf(g(x), k)は、多項式gの根を区間分離と番号k（0始まり）で特定する厳密な代数的数表示です。近似値も併記しています。")
+            warnings.append("計算系が明示式を取得できなかった根には、CRootOf(g(x), k)を使用しています。根号などによる表示が不可能だと判定したものではありません。多項式gの根を区間分離と番号k（0始まり）で特定する厳密な代数的数表示で、近似値も併記しています。")
     total = sum(root["multiplicity"] for root in result["roots"])
     if scope == "all" and total != degree:
         raise ArithmeticError("Whole-root multiplicity coverage failed")
