@@ -1,0 +1,15 @@
+{
+  "name": "polynomial-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Accessible, browser-based polynomial roots and irreducibility calculator",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "python -m http.server 8000 --bind 127.0.0.1 --directory dist",
+    "test": "python -m unittest discover -s tests -v"
+  }
+}

@@ -1,0 +1,3 @@
+# Match the verified Pyodide 0.27.7 package lock used by web/worker.js.
+sympy==1.13.3
+mpmath==1.3.0

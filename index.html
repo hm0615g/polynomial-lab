@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#125f5b">
+  <meta name="description" content="有理数体・有限体の多項式について、根、重複度、既約性、因数分解をブラウザで厳密に計算。テキストと整形数式の両方に対応します。">
+  <title>Polynomial Lab — 多項式の根・既約性</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous" id="katex-script"></script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body data-display="both">
+  <a class="skip-link" href="#calculator">計算フォームへ移動</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./" aria-label="Polynomial Lab ホーム">
+        <span class="brand-mark" aria-hidden="true">f<span>(x)</span></span>
+        <span>Polynomial <strong>Lab</strong></span>
+      </a>
+      <span class="header-caption">根と、構造を確かめる。</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">POLYNOMIAL CALCULATOR</p>
+        <h1>多項式の根・既約性</h1>
+        <p class="intro">有理数体・有限体で、根と因数分解を厳密に計算します。</p>
+      </div>
+      <div class="runtime-state" id="runtime-state" data-state="loading">
+        <span class="state-indicator" aria-hidden="true"></span>
+        <p id="engine-status" role="status" aria-live="polite">計算エンジンを準備しています…</p>
+        <button type="button" class="text-button" id="retry-engine" hidden>再読み込み</button>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <aside class="input-column" aria-label="入力と表示設定">
+        <section class="panel input-panel" aria-labelledby="input-heading">
+          <div class="section-heading">
+            <h2 id="input-heading">多項式を入力</h2>
+            <span class="quiet-tag">一変数 x</span>
+          </div>
+          <form id="calculator" novalidate>
+            <label for="polynomial" class="sr-only">多項式</label>
+            <textarea id="polynomial" name="polynomial" rows="3" maxlength="3000" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="polynomial-hint" required>x^4 - 4x^2 + 2</textarea>
+            <p class="field-hint" id="polynomial-hint">累乗は ^、分数は 1/2。4x や (x+1)^2 も使えます。</p>
+
+            <div class="field-row">
+              <div class="form-field">
+                <label for="field">係数体</label>
+                <select id="field" name="field">
+                  <option value="Q">有理数体 Q</option>
+                  <option value="Fp">有限体 F_p</option>
+                </select>
+              </div>
+              <div class="form-field" id="prime-field" hidden>
+                <label for="prime">素数 p</label>
+                <input id="prime" name="p" type="number" min="2" max="2147483647" step="1" value="2" inputmode="numeric" disabled>
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label for="root-scope">根を求める範囲</label>
+              <select id="root-scope" name="root_scope" aria-describedby="scope-hint">
+                <option value="all">代数的閉包 — 全ての根</option>
+                <option value="real">実数の根のみ</option>
+                <option value="base">有理数の根のみ</option>
+              </select>
+              <p class="field-hint" id="scope-hint">既約性は、選択した係数体上で判定します。</p>
+            </div>
+
+            <div class="form-field precision-field" id="precision-field">
+              <label for="digits">近似値の有効桁数</label>
+              <div class="number-with-unit">
+                <input id="digits" name="digits" type="number" min="5" max="50" step="1" value="15" inputmode="numeric" aria-describedby="digits-hint">
+                <span aria-hidden="true">桁</span>
+              </div>
+              <span id="digits-hint" class="sr-only">5桁から50桁まで指定できます。</span>
+            </div>
+
+            <div id="error-message" class="error-message" role="alert" hidden></div>
+            <p id="calculation-note" class="calculation-note" role="status" hidden></p>
+            <div class="action-row">
+              <button id="calculate" type="submit" class="primary-button" disabled>準備中…</button>
+              <button id="cancel" type="button" class="secondary-button" hidden>中止</button>
+            </div>
+            <p class="shortcut-hint">Ctrl + Enter でも計算できます</p>
+          </form>
+
+          <div class="examples" aria-labelledby="examples-heading">
+            <h3 id="examples-heading">例を試す</h3>
+            <div class="example-buttons">
+              <button type="button" data-example="eisenstein">アイゼンシュタイン</button>
+              <button type="button" data-example="quintic">5次多項式</button>
+              <button type="button" data-example="finite">有限体の拡大体</button>
+              <button type="button" data-example="multiple">重根</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel display-panel" aria-labelledby="display-heading">
+          <h2 id="display-heading">数式の表示</h2>
+          <fieldset class="display-options">
+            <legend class="sr-only">数式の表示形式</legend>
+            <label><input type="radio" name="display" value="text"><span>テキスト</span></label>
+            <label><input type="radio" name="display" value="math"><span>整形数式</span></label>
+            <label><input type="radio" name="display" value="both" checked><span>両方</span></label>
+          </fieldset>
+          <p class="field-hint">テキストは読み上げとコピーに対応しています。</p>
+          <p id="math-notice" class="field-hint" role="status" hidden>整形数式を読み込めないため、式をテキストで表示しています。</p>
+        </section>
+
+        <details class="help-panel">
+          <summary>入力・計算について</summary>
+          <div class="help-content">
+            <p>整数、分数、有限小数、括弧、加減乗除、非負整数乗を使えます。除算の分母は定数に限ります。小数も有理数として正確に扱います。</p>
+            <p>上限は次数50、入力3000文字、係数の分子・分母は各100桁です。有限体の p は 2 以上 2147483647 以下の素数を指定してください。</p>
+            <p>1回の計算は30秒で中止します。複雑な式は上限内でも時間がかかることがあります。</p>
+            <p><code>RootOf(f, k)</code> は、多項式と根番号で一意に指定した厳密な値です。根号で表せない根も、この表現と近似値で確認できます。</p>
+            <p>有限体では、既約因子ごとに拡大体を定義して全根を表示します。各拡大体の記号と定義は結果欄に示します。</p>
+          </div>
+        </details>
+      </aside>
+
+      <section class="panel result-panel" id="result-panel" aria-labelledby="results-heading" aria-busy="false">
+        <div class="result-topbar">
+          <h2 id="results-heading" tabindex="-1">計算結果</h2>
+          <span id="result-scope-tag" class="quiet-tag" hidden></span>
+        </div>
+        <p id="result-context-note" class="result-context-note" hidden>表示中の結果は前回の計算です。現在の入力で計算すると更新されます。</p>
+        <div id="empty-state" class="empty-state">
+          <div class="empty-formula" aria-hidden="true">f(x) = 0</div>
+          <h3>多項式の、その先へ。</h3>
+          <p>式と係数体を選び、計算ボタンを押してください。<br>根・重複度・既約性をまとめて確認できます。</p>
+          <div class="empty-features" aria-hidden="true"><span>厳密な値</span><span>重複度</span><span>因数分解</span></div>
+        </div>
+        <div id="results" hidden></div>
+        <div id="copy-toolbar" class="copy-toolbar" hidden>
+          <button id="copy-text" type="button" class="secondary-button small-button">結果をテキストでコピー</button>
+          <button id="copy-latex" type="button" class="text-button">LaTeXソースをコピー</button>
+        </div>
+      </section>
+    </div>
+
+    <footer class="site-footer">
+      <span>Polynomial Lab</span>
+      <p>計算はこのブラウザ内で実行します。</p>
+    </footer>
+  </main>
+  <div id="feedback" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="noscript-message">このアプリの計算にはJavaScriptが必要です。ブラウザでJavaScriptを有効にしてください。</p></noscript>
+</body>
+</html>
