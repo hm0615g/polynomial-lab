@@ -116,6 +116,68 @@ class KernelTests(unittest.TestCase):
             approximation = sp.sympify(root["approx_text"])
             self.assertLess(abs(complex((approximation**5 - approximation + 1).evalf())), 1e-20)
 
+    def assert_explicit_q_roots(self, source, result, scope="all"):
+        """Compare exact expressions and their decimals with independent nroots."""
+        polynomial = kernel.parse_polynomial(source)
+        expected = list(polynomial.nroots(n=40, maxsteps=200))
+        if scope == "real":
+            expected = [root for root in expected if root.is_real]
+        self.assertEqual(len(result["roots"]), len(expected))
+        tolerance = sp.Float("1e-25")
+        for root in result["roots"]:
+            self.assertNotIn("RootOf", root["text"])
+            exact = sp.sympify(root["text"].replace("^", "**"))
+            self.assertFalse(exact.has(sp.Float))
+            value = exact.evalf(40)
+            closest = min(range(len(expected)), key=lambda i: abs(complex(value - expected[i])))
+            self.assertLess(abs(value - expected.pop(closest)).evalf(), tolerance)
+            decimal = sp.sympify(root["approx_text"])
+            self.assertLess(abs(value - decimal).evalf(), tolerance)
+            if root["field_label"] == "Qbar ∩ R":
+                self.assertTrue(decimal.is_real)
+        self.assertFalse(expected)
+
+    def test_general_quartic_prefers_radicals_for_all_and_real_scopes(self):
+        source = "x^4-x^3+x^2-x-1"
+        for scope, count in (("all", 4), ("real", 2)):
+            with self.subTest(scope=scope):
+                result = self.calculation(source, root_scope=scope, digits=35)
+                self.assertEqual(result["summary"]["total_multiplicity"], count)
+                self.assert_explicit_q_roots(source, result, scope)
+                self.assertEqual(sum(root["field_label"] == "Qbar ∩ R"
+                                     for root in result["roots"]), 2)
+
+    def test_cubic_complex_intermediates_keep_every_real_root(self):
+        source = "x^3-3x+1"
+        result = self.calculation(source, root_scope="real", digits=35)
+        self.assertEqual(result["summary"]["total_multiplicity"], 3)
+        self.assertTrue(all(root["field_label"] == "Qbar ∩ R" for root in result["roots"]))
+        self.assert_explicit_q_roots(source, result, "real")
+
+    def test_supported_solvable_quintic_prefers_explicit_roots(self):
+        source = "x^5+15x+12"
+        for scope, count in (("all", 5), ("real", 1)):
+            with self.subTest(scope=scope):
+                result = self.calculation(source, root_scope=scope, digits=35)
+                self.assertEqual(result["summary"]["total_multiplicity"], count)
+                self.assert_explicit_q_roots(source, result, scope)
+
+    def test_higher_degree_explicit_roots_and_pi_notation(self):
+        for source, scope in (("x^7-2", "all"), ("x^7-2", "real"),
+                              ("x^6+x^5+x^4+x^3+x^2+x+1", "all")):
+            with self.subTest(source=source, scope=scope):
+                result = self.calculation(source, root_scope=scope, digits=35)
+                self.assert_explicit_q_roots(source, result, scope)
+                if scope == "all":
+                    self.assertTrue(any("pi" in root["text"] for root in result["roots"]))
+
+    def test_explicit_cubic_real_roots_preserve_outer_multiplicities(self):
+        result = self.calculation("(x^3-3x+1)^2*(x^3+x+1)", root_scope="real")
+        self.assertEqual(result["summary"]["total_multiplicity"], 7)
+        self.assertEqual(sorted(root["multiplicity"] for root in result["roots"]), [1, 2, 2, 2])
+        self.assertTrue(all("RootOf" not in root["text"] for root in result["roots"]))
+        self.assertTrue(all(root["field_label"] == "Qbar ∩ R" for root in result["roots"]))
+
     def test_rational_and_real_scopes_do_not_change_irreducibility(self):
         source = "(x-1)^2*(x^2-2)*(x^2+1)"
         all_roots = self.calculation(source)
